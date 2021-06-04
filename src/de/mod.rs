@@ -2,6 +2,7 @@ use cobs::decode_in_place;
 use serde::Deserialize;
 
 pub(crate) mod deserializer;
+pub(crate) mod deserializer_handles;
 
 use crate::error::{Error, Result};
 use deserializer::Deserializer;
@@ -13,6 +14,17 @@ where
     T: Deserialize<'a>,
 {
     let mut deserializer = Deserializer::from_bytes(s);
+    let t = T::deserialize(&mut deserializer)?;
+    Ok(t)
+}
+
+/// Deserialize a message of type `T` from a byte and handle slice. The unused portion (if any)
+/// of the byte slice is not returned.
+pub fn from_bytes_handles<'a, T>(s: &'a [u8], h: &'a[u8]) -> Result<T>
+where
+    T: Deserialize<'a>,
+{
+    let mut deserializer = deserializer_handles::Deserializer::from_bytes(s, h);
     let t = T::deserialize(&mut deserializer)?;
     Ok(t)
 }

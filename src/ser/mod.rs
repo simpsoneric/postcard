@@ -18,9 +18,11 @@ use crate::ser::flavors::AllocVec;
 extern crate alloc;
 
 use crate::ser::serializer::Serializer;
+use crate::ser::serializer_handles::SerializerHandles;
 
 pub mod flavors;
 pub(crate) mod serializer;
+pub(crate) mod serializer_handles;
 
 /// Serialize a `T` to the given slice, with the resulting slice containing
 /// data in a serialized then COBS encoded format. The terminating sentinel `0x00` byte is included
@@ -94,6 +96,21 @@ where
     T: Serialize + ?Sized,
 {
     serialize_with_flavor::<T, Slice<'a>, &'a mut [u8]>(value, Slice::new(buf))
+}
+
+/// Serialize a `T` to the given slice, with the resulting slice containing
+/// data and handles in a serialized format.
+///
+/// When successful, this function returns the slices containing:
+///
+/// 1. A slice that contains the serialized message
+/// 2. A slice that contains the unused portion of the given buffer
+///
+pub fn to_bytes_handles<'a, 'b, T>(value: &'b T, data: &'a mut [u8], handles: &'a mut[u8]) -> Result<(&'a mut [u8], &'a mut [u8])>
+where
+    T: Serialize + ?Sized,
+{
+    serialize_with_handles::<T, Slice<'a>, &'a mut [u8]>(value, Slice::new(data), Slice::new(handles))
 }
 
 /// Serialize a `T` to a `heapless::Vec<u8>`, with the `Vec` containing
@@ -294,6 +311,20 @@ where
         .output
         .release()
         .map_err(|_| Error::SerializeBufferFull)
+}
+
+pub fn serialize_with_handles<T, F, O>(value: &T, output: F, handles: F) -> Result<(O, O)>
+where
+    T: Serialize + ?Sized,
+    F: SerFlavor<Output = O>,
+{
+    let mut serializer = SerializerHandles { output, handles };
+    value.serialize(&mut serializer)?;
+
+    let d = serializer.output.release().map_err(|_| Error::SerializeBufferFull)?;
+    let h = serializer.handles.release().map_err(|_| Error::SerializeBufferFull)?;
+
+    Ok((d, h))
 }
 
 #[cfg(feature = "heapless")]
